@@ -13,7 +13,6 @@ This project features a Python application that employs an agentic Language Mode
 - **llm_agentic_app_for_price_sources.py**: This is the core script of the project, defining the agentic LLM application. It manages the agent's state, processes search queries, and evaluates the relevance of web content for extracting pricing data.
 - **build_raw_response_analysis.ipynb**: A Jupyter Notebook designed to analyze the raw responses obtained from the agentic application. It includes tools for inspecting the LLM output and refining the data analysis process.
 - **run_retrieve_price_sources.ipynb**: An entry-point Jupyter Notebook for executing the LLM-powered search and retrieval process. It initializes the environment and guides the user through the data retrieval pipeline.
-- **README.md**: This file, providing a high-level overview of the project.
 
 ### Features
 
