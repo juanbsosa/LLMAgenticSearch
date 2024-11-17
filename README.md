@@ -1,5 +1,7 @@
 # LLM Agentic Search Application (Work in Progress)
 
+![image](https://github.com/user-attachments/assets/87636029-14af-438a-a7a3-248f27e0694d)
+
 ## 🚧 Ongoing Development 🚧
 
 **Note**: This repository is a work in progress, and further changes are expected soon. The current implementation serves as an initial prototype and is part of a broader project in which I am involved, aimed at building advanced tools for dynamic data retrieval using Language Models (LLMs) (https://www.machineryofprogress.com/, led by Peter Lambert and Yannick Schindler).
