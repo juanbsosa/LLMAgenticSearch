@@ -24,7 +24,7 @@ from IPython.display import Image, display
 from tavily import TavilyClient
 
 # Type validation
-from typing import TypedDict, List, Dict, Tuple
+from typing import TypedDict, List, Dict
 
 # To count tokens
 import tiktoken
@@ -55,9 +55,8 @@ class AgentState(TypedDict):
 
     n_refined_search_terms: int # Number of refined search terms to create in each iteration.
     max_results_per_search_term: int # Number of results to collect per search term.
-    # refined_search_terms: List[Tuple[str, int, int]] # List of new search terms created by the agent, with the corresponding iteration number and model temperature.
-    search_terms_temperature_iteration: List[Tuple[str, int, int]] # List of new search terms created by the agent, with the corresponding iteration number and model temperature.
-    
+    refined_search_terms: List[str] # List of new search terms created by the agent.
+
     iteration_number: int # Keeps track of the number of iterations (loop: evaluate-refine-search).
     max_iterations: int # Maximum number of iterations allowed.
 
@@ -138,11 +137,7 @@ def evaluate_search_result_node(state: AgentState):
 
     # Load commodity
     commodity = state['commodity']
-
-    # If initial iteration
     if iteration_number==0:
-        print('\n')
-        print("----------------------------------------------------------")
         print("Performing evaluation for commodity: ", commodity)
 
         # Reset the evaluated search results
@@ -158,24 +153,17 @@ def evaluate_search_result_node(state: AgentState):
     search_results_to_evaluate = state['search_results_to_evaluate']
 
     # Remove the duplicated URLs in the search results to evaluate
+    def remove_duplicates(dict_list):
+        seen_urls = set()
+        unique_dicts = []
+        for d in dict_list:
+            url = d['url']
+            if url not in seen_urls:
+                unique_dicts.append(d)  # Add the dictionary if the URL hasn't been seen
+                seen_urls.add(url)  # Mark the URL as seen
+        return unique_dicts
     search_results_to_evaluate = remove_duplicates(search_results_to_evaluate)
-    print("Amount of search results to evaluate in the current iteration: ", 
-          len(search_results_to_evaluate))
-
-    # If initial iteration
-    if iteration_number==0:
-
-        # Get the search terms used in the initial search
-        initial_search_terms = [search_result['query'] for search_result in search_results_to_evaluate]
-        # Only keep unique search terms
-        initial_search_terms = list(set(initial_search_terms))
-
-        # Insert initial search terms into refined search terms
-        search_terms_temperature_iteration = [(term, 0, None) for term in initial_search_terms]
-
-    else:
-        # Retrieve the already existing refined search terms
-        search_terms_temperature_iteration = state['search_terms_temperature_iteration']
+    print("Amount of search results to evaluate in the current iteration: ", len(search_results_to_evaluate))
 
     # Retrieve input and output tokens
     n_input_tokens = state.get('n_input_tokens', 0)
@@ -269,7 +257,6 @@ def evaluate_search_result_node(state: AgentState):
 
     return {"evaluated_search_results": evaluated_search_results, 
             'search_results_to_evaluate': search_results_to_evaluate,
-            'search_terms_temperature_iteration': search_terms_temperature_iteration,
             'iteration_number': iteration_number,
             'n_input_tokens': n_input_tokens,
             'n_output_tokens': n_output_tokens}
@@ -279,8 +266,7 @@ def refine_search_term_node(state: AgentState):
 
     # Initiate a model (the temperature will increase in each iteration)
     iteration_number = state.get('iteration_number')
-    temp = round(min(0.1 + 0.2*iteration_number, 1),2)
-    print("Temperature set for this iteration: ", temp)
+    temp = min(0.1 + 0.2*iteration_number, 1)
     search_term_refinement_model = ChatOpenAI(model='gpt-4o-mini', temperature=temp)
 
     # Retrieve the evaluated search results from the state
@@ -402,12 +388,8 @@ def refine_search_term_node(state: AgentState):
               [term for term in response.refined_search_terms if term in all_search_terms])
 
     print("Refined search terms: ", refined_search_terms)
-
-    # Add the refined search terms to the state
-    search_terms_temperature_iteration = state.get('search_terms_temperature_iteration')
-    search_terms_temperature_iteration = search_terms_temperature_iteration + [(term, iteration_number, temp) for term in refined_search_terms]
     
-    return {"search_terms_temperature_iteration": search_terms_temperature_iteration,
+    return {"refined_search_terms": refined_search_terms,
             'n_input_tokens': n_input_tokens,
             'n_output_tokens': n_output_tokens}
 
@@ -416,12 +398,7 @@ def refine_search_term_node(state: AgentState):
 def search_node(state: AgentState):
 
     # Retrieve from the state
-    search_terms_temperature_iteration = state.get('search_terms_temperature_iteration')
-
-    # Get the search terms for the current iteration
-    refined_search_terms = [term for term, iteration, temp in search_terms_temperature_iteration if iteration==state['iteration_number']]
-
-    # Retrieve max_results_per_search_term
+    refined_search_terms = state.get('refined_search_terms', [])
     max_results_per_search_term = state.get('max_results_per_search_term', 3) # default is 3
     
     # Create empty list of dictionaries to store search results
@@ -464,7 +441,7 @@ def count_approved_search_results(state):
     evaluated_search_results = state.get('evaluated_search_results', [])
     min_approved_search_results = state.get('min_approved_search_results', 1)
     iteration_number = state.get('iteration_number')
-    print("Just finished iteration number: ", iteration_number-1)
+    print("Just finished iteration number: ", iteration_number)
     max_iterations = state.get('max_iterations', 2)
 
     approved_search_results = [evaluated_result for evaluated_result in evaluated_search_results if evaluated_result['evaluation_outcome']==True]
@@ -478,7 +455,7 @@ def count_approved_search_results(state):
             print(approved_result['title'], approved_result['url'])
         return END
     
-    elif (iteration_number-1) > max_iterations:
+    elif iteration_number >= max_iterations:
         print(f"Maximum number of iterations ({max_iterations}) reached. End of pipeline.")
         print("Final approved search results: ")
         for approved_result in approved_search_results:
@@ -769,19 +746,6 @@ def calculate_costs(
         'n_tavily_api_calls': n_tavily_api_calls
         # 'tavily_monthly_cost': tavily_monthly_cost
     }
-
-#%% UTILS
-
-# Remove the duplicated URLs in the search results to evaluate
-def remove_duplicates(dict_list):
-    seen_urls = set()
-    unique_dicts = []
-    for d in dict_list:
-        url = d['url']
-        if url not in seen_urls:
-            unique_dicts.append(d)  # Add the dictionary if the URL hasn't been seen
-            seen_urls.add(url)  # Mark the URL as seen
-    return unique_dicts
 
 
 # #%% 
